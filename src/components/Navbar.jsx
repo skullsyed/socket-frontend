@@ -10,7 +10,6 @@ export default function AppNavbar() {
       <Link to="/chat" className="navbar-brand">
         Chat App
       </Link>
-      <Link>chat</Link>
 
       {user && (
         <button className="btn btn-danger" onClick={logout}>
