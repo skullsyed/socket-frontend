@@ -11,7 +11,7 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    const s = io("https://socket-backend-quck.onrender.com", {
+    const s = io("http://localhost:5000", {
       auth: { token: localStorage.getItem("token") },
     });
 

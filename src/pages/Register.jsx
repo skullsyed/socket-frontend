@@ -12,7 +12,11 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
 
-    await API.post("/api/auth/register", { name, email, password });
+    await API.post("api/auth/register", {
+      name,
+      email,
+      password,
+    });
     navigate("/login");
   };
 

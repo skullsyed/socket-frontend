@@ -1,29 +1,57 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 export default function UserList() {
-  const [user, setUser] = useState("syed");
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState("syed");
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { data } = await axios.get(
+          "http://localhost:5000/api/auth/getAllUser",
+          {
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
+          }
+        );
+        setUsers(data.data); // store full user list
+        setUsername(data[0]?.name || "No User");
+      } catch (error) {
+        console.error(error.message);
+      }
+      setLoading(false);
+    };
+
+    fetchData();
+  }, []);
 
   return (
-    <nav class="nav flex-column">
+    <nav className="nav flex-column">
       <a
-        class="btn btn-primary"
+        className="btn btn-primary"
         data-bs-toggle="offcanvas"
         href="#offcanvasExample"
         role="button"
         aria-controls="offcanvasExample"
       >
-        {user}
+        Users
       </a>
 
-      <a class="nav-link" href="#">
-        Link
-      </a>
-      <a class="nav-link" href="#">
-        Link
-      </a>
-      <a class="nav-link disabled" aria-disabled="true">
-        Disabled
-      </a>
+      {/* Loader */}
+      {loading && <p className="nav-link">Loading...</p>}
+
+      {/* List users */}
+      {!loading &&
+        users.map((u) => (
+          <a key={u._id} className="nav-link">
+            {u.name}
+          </a>
+        ))}
     </nav>
   );
 }
