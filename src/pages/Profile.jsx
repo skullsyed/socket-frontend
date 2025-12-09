@@ -1,8 +1,10 @@
 import { useContext, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
+import { MessageContext } from "../context/MessageContext";
 
 export default function Profile() {
   const { user, logout } = useContext(AuthContext);
+  const { unreadCount } = useContext(MessageContext);
   const [showDropdown, setShowDropdown] = useState(false);
 
   const handleLogout = () => {
@@ -15,9 +17,9 @@ export default function Profile() {
   }
 
   return (
-    <div className="dropdown">
+    <div className="dropdown position-relative">
       <button
-        className="btn btn-link dropdown-toggle d-flex align-items-center"
+        className="btn btn-link dropdown-toggle d-flex align-items-center position-relative"
         type="button"
         onClick={() => setShowDropdown(!showDropdown)}
         style={{
@@ -38,6 +40,26 @@ export default function Profile() {
         >
           {user.name ? user.name.charAt(0).toUpperCase() : "U"}
         </div>
+
+        {/* Unread Messages Badge */}
+        {unreadCount > 0 && (
+          <span
+            className="position-absolute badge bg-danger rounded-circle"
+            style={{
+              top: "5px",
+              right: "45px",
+              fontSize: "10px",
+              minWidth: "18px",
+              height: "18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+
         <span className="d-none d-md-inline">{user.name}</span>
       </button>
 
@@ -45,12 +67,20 @@ export default function Profile() {
       {showDropdown && (
         <div
           className="dropdown-menu dropdown-menu-end show position-absolute"
-          style={{ right: 0, top: "100%" }}
+          style={{ right: 0, top: "100%", zIndex: 1000 }}
         >
           <div className="dropdown-header">
             <strong>{user.name}</strong>
             <br />
             <small className="text-muted">{user.email}</small>
+            {unreadCount > 0 && (
+              <div className="mt-1">
+                <small className="badge bg-primary">
+                  {unreadCount} unread message
+                  {unreadCount !== 1 ? "s" : ""}
+                </small>
+              </div>
+            )}
           </div>
           <div className="dropdown-divider"></div>
 
@@ -85,7 +115,7 @@ export default function Profile() {
       {showDropdown && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100"
-          style={{ zIndex: -1 }}
+          style={{ zIndex: 999 }}
           onClick={() => setShowDropdown(false)}
         />
       )}
