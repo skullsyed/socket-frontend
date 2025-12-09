@@ -2,63 +2,123 @@ import { useContext, useEffect, useState } from "react";
 import { SocketContext } from "../context/SocketContext";
 import { AuthContext } from "../context/AuthContext";
 import axios from "axios";
+import API from "../api/axiosConfig";
 
-export default function Chat() {
+export default function Chat({ selectedUser }) {
   const { socket } = useContext(SocketContext);
   const { user } = useContext(AuthContext);
 
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState([]);
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-
-    await API.post("/api/messages/createMessage", {
-      message,
-    });
-    navigate("/login");
-  };
-
   useEffect(() => {
     const fetchMessages = async () => {
-      const res = await axios.get("/api/messages/getAllMessage");
-      const data = await res.data;
-      setChat(data); // Set old messages
+      if (!selectedUser || !user) return;
+      try {
+        // Use query parameters as your backend expects
+        const res = await API.get("/api/messages/getAllMessage", {
+          params: {
+            senderId: user._id,
+            receiverId: selectedUser._id,
+          },
+        });
+
+        console.log("Fetched messages:", res.data);
+        setChat(res.data || []);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      }
     };
 
     fetchMessages();
-  }, []);
+  }, [selectedUser, user]);
 
   // Listen for new socket messages
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user) return;
 
-    socket.on("private-message", (msg) => {
-      // Only show if sender or receiver matches the selected user
-      if (msg.senderId === user._id || msg.senderId === selectedUser?._id) {
+    const handlePrivateMessage = (msg) => {
+      // Only add message if it's between current user and selected user
+      console.log("Received socket message:", msg);
+      if (
+        selectedUser &&
+        ((msg.senderId === user._id && msg.receiverId === selectedUser._id) ||
+          (msg.senderId === selectedUser._id && msg.receiverId === user._id))
+      ) {
         setChat((prev) => [...prev, msg]);
       }
-    });
+    };
 
-    return () => socket.off("private-message");
+    socket.on("private-message", handlePrivateMessage);
+
+    return () => socket.off("private-message", handlePrivateMessage);
   }, [socket, user, selectedUser]);
 
-  const sendMessage = () => {
-    if (!selectedUser) return;
+  const sendMessage = async () => {
+    if (!selectedUser || !message.trim() || !user) return;
+
     const msg = {
       senderId: user._id,
       receiverId: selectedUser._id,
-      text: message,
+      message: message.trim(), // Use 'message' field to match your backend
+      timestamp: new Date().toISOString(),
     };
 
-    socket.emit("private-message", msg);
-    setChat((prev) => [...prev, msg]);
+    try {
+      console.log("Sending message to database:", msg);
+      // Save message to database first
+      const response = await API.post("/api/messages/createMessage", {
+        senderId: msg.senderId,
+        receiverId: msg.receiverId,
+        message: msg.message, // Note: using 'message' field as per your backend
+      });
 
-    setMessage("");
+      console.log("Database response:", response.data);
+
+      // Create message object for socket and UI (with 'text' for consistency)
+      const socketMsg = {
+        ...msg,
+        text: msg.message, // Add text field for socket compatibility
+        _id: response.data._id, // Add ID from database response
+      };
+
+      // Then emit via socket for real-time delivery
+      socket.emit("private-message", socketMsg);
+
+      // Add to local state for immediate UI update
+      setChat((prev) => [...prev, response.data]); // Use the response from database
+
+      setMessage("");
+    } catch (error) {
+      console.error("Error saving message to database:", error);
+      console.error("Error details:", error.response?.data);
+
+      // Still emit via socket and update UI even if database save fails
+      socket.emit("private-message", {
+        ...msg,
+        text: msg.message,
+      });
+      setChat((prev) => [...prev, msg]);
+      setMessage("");
+      // Show user feedback about the error
+      alert(
+        "Message sent but may not be saved to database. Check console for details."
+      );
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      sendMessage();
+    }
   };
 
   if (!selectedUser) {
-    return <h4>Select a user to start chatting</h4>;
+    return (
+      <div className="container mt-4">
+        <h4>Select a user to start chatting</h4>
+      </div>
+    );
   }
 
   return (
@@ -69,14 +129,37 @@ export default function Chat() {
         className="border p-3 mb-3"
         style={{ height: "300px", overflowY: "auto" }}
       >
-        {chat.map((msg, idx) => (
-          <p key={idx}>
-            <strong>
-              {msg.senderId === user._id ? "You" : selectedUser.name}:
-            </strong>{" "}
-            {msg.text}
-          </p>
-        ))}
+        {chat.length === 0 ? (
+          <p className="text-muted">No messages yet. Start the conversation!</p>
+        ) : (
+          chat.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`mb-2 ${
+                msg.senderId === user._id ? "text-end" : "text-start"
+              }`}
+            >
+              <div
+                className={`d-inline-block p-2 rounded ${
+                  msg.senderId === user._id
+                    ? "bg-primary text-white"
+                    : "bg-light text-dark"
+                }`}
+                style={{ maxWidth: "70%" }}
+              >
+                <strong>
+                  {msg.senderId === user._id ? "You" : selectedUser.name}:
+                </strong>{" "}
+                {msg.text || msg.message}
+                {msg.timestamp && (
+                  <small className="d-block mt-1 opacity-75">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </small>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="d-flex">
@@ -84,9 +167,14 @@ export default function Chat() {
           className="form-control"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={handleKeyPress}
           placeholder="Type message..."
         />
-        <button className="btn btn-primary ms-2" onClick={sendMessage}>
+        <button
+          className="btn btn-primary ms-2"
+          onClick={sendMessage}
+          disabled={!message.trim()}
+        >
           Send
         </button>
       </div>
