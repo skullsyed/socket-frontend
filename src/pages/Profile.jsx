@@ -17,107 +17,123 @@ export default function Profile() {
   }
 
   return (
-    <div className="dropdown position-relative">
+    <div className="dropdown">
       <button
-        className="btn btn-link dropdown-toggle d-flex align-items-center position-relative"
+        className="btn btn-link text-white dropdown-toggle d-flex align-items-center text-decoration-none"
         type="button"
         onClick={() => setShowDropdown(!showDropdown)}
-        style={{
-          textDecoration: "none",
-          border: "none",
-          color: "white",
-        }}
+        style={{ border: "none" }}
       >
-        {/* Profile Icon */}
-        <div
-          className="rounded-circle bg-primary d-flex align-items-center justify-content-center me-2"
-          style={{
-            width: "35px",
-            height: "35px",
-            fontSize: "16px",
-            fontWeight: "bold",
-          }}
-        >
-          {user.name ? user.name.charAt(0).toUpperCase() : "U"}
-        </div>
-
-        {/* Unread Messages Badge */}
-        {unreadCount > 0 && (
-          <span
-            className="position-absolute badge bg-danger rounded-circle"
-            style={{
-              top: "5px",
-              right: "45px",
-              fontSize: "10px",
-              minWidth: "18px",
-              height: "18px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+        {/* Profile Avatar */}
+        <div className="position-relative me-2">
+          <div
+            className="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold"
+            style={{ width: "35px", height: "35px", fontSize: "16px" }}
           >
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
+            {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+          </div>
+
+          {/* Unread Badge */}
+          {unreadCount > 0 && (
+            <span
+              className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              style={{ fontSize: "10px" }}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </div>
 
         <span className="d-none d-md-inline">{user.name}</span>
       </button>
 
       {/* Dropdown Menu */}
       {showDropdown && (
-        <div
-          className="dropdown-menu dropdown-menu-end show position-absolute"
-          style={{ right: 0, top: "100%", zIndex: 1000 }}
-        >
-          <div className="dropdown-header">
-            <strong>{user.name}</strong>
-            <br />
-            <small className="text-muted">{user.email}</small>
-            {unreadCount > 0 && (
-              <div className="mt-1">
-                <small className="badge bg-primary">
-                  {unreadCount} unread message
-                  {unreadCount !== 1 ? "s" : ""}
-                </small>
+        <>
+          {/* Backdrop */}
+          <div
+            className="position-fixed top-0 start-0 w-100 h-100"
+            style={{ zIndex: 1040 }}
+            onClick={() => setShowDropdown(false)}
+          />
+
+          {/* Dropdown */}
+          <div
+            className="dropdown-menu dropdown-menu-end show position-absolute shadow"
+            style={{
+              right: 0,
+              top: "100%",
+              zIndex: 1050,
+              minWidth: "250px",
+            }}
+          >
+            {/* User Info Header */}
+            <div className="dropdown-header bg-light">
+              <div className="d-flex align-items-center">
+                <div
+                  className="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold me-2"
+                  style={{ width: "30px", height: "30px", fontSize: "14px" }}
+                >
+                  {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div>
+                  <div className="fw-bold">{user.name}</div>
+                  <small className="text-muted">{user.email}</small>
+                </div>
               </div>
-            )}
+
+              {unreadCount > 0 && (
+                <div className="mt-2">
+                  <span className="badge bg-primary">
+                    <i className="bi bi-envelope-fill me-1"></i>
+                    {unreadCount} unread message
+                    {unreadCount !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="dropdown-divider"></div>
+
+            {/* Menu Items */}
+            <a
+              className="dropdown-item d-flex align-items-center"
+              href="#"
+              onClick={(e) => e.preventDefault()}
+            >
+              <i className="bi bi-person-fill me-2 text-primary"></i>
+              View Profile
+            </a>
+
+            <a
+              className="dropdown-item d-flex align-items-center"
+              href="#"
+              onClick={(e) => e.preventDefault()}
+            >
+              <i className="bi bi-gear-fill me-2 text-secondary"></i>
+              Settings
+            </a>
+
+            <a
+              className="dropdown-item d-flex align-items-center"
+              href="#"
+              onClick={(e) => e.preventDefault()}
+            >
+              <i className="bi bi-bell-fill me-2 text-warning"></i>
+              Notifications
+            </a>
+
+            <div className="dropdown-divider"></div>
+
+            <button
+              className="dropdown-item d-flex align-items-center text-danger"
+              onClick={handleLogout}
+            >
+              <i className="bi bi-box-arrow-right me-2"></i>
+              Logout
+            </button>
           </div>
-          <div className="dropdown-divider"></div>
-
-          <a
-            className="dropdown-item"
-            href="#"
-            onClick={(e) => e.preventDefault()}
-          >
-            <i className="fas fa-user me-2"></i>
-            View Profile
-          </a>
-
-          <a
-            className="dropdown-item"
-            href="#"
-            onClick={(e) => e.preventDefault()}
-          >
-            <i className="fas fa-cog me-2"></i>
-            Settings
-          </a>
-
-          <div className="dropdown-divider"></div>
-
-          <button className="dropdown-item text-danger" onClick={handleLogout}>
-            <i className="fas fa-sign-out-alt me-2"></i>
-            Logout
-          </button>
-        </div>
-      )}
-
-      {/* Overlay to close dropdown when clicking outside */}
-      {showDropdown && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100"
-          style={{ zIndex: 999 }}
-          onClick={() => setShowDropdown(false)}
-        />
+        </>
       )}
     </div>
   );

@@ -1,36 +1,63 @@
 import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { Link } from "react-router-dom";
-import Profile from "../pages/Profile"; // Import Profile component
+import Profile from "../pages/Profile";
 
 export default function AppNavbar() {
-  const { user } = useContext(AuthContext); // Add this line to get user from context
+  const { user } = useContext(AuthContext);
 
   return (
-    <nav className="navbar navbar-dark bg-dark px-3 d-flex justify-content-between">
-      <Link to="/dashboard" className="navbar-brand">
-        <i className="fas fa-comments me-2"></i>
-        Chat App
-      </Link>
+    <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow">
+      <div className="container-fluid px-3">
+        <Link
+          to="/dashboard"
+          className="navbar-brand d-flex align-items-center"
+        >
+          <i className="bi bi-chat-square-text-fill me-2"></i>
+          <span className="fw-bold">Chat App</span>
+        </Link>
 
-      {user && (
-        <div className="d-flex align-items-center">
-          {/* Navigation Links */}
-          <div className="navbar-nav flex-row me-3 d-none d-md-flex">
-            <Link to="/dashboard" className="nav-link me-3">
-              <i className="fas fa-home me-1"></i>
-              Dashboard
-            </Link>
-            <Link to="/chat" className="nav-link me-3">
-              <i className="fas fa-comments me-1"></i>
-              Chat
-            </Link>
-          </div>
+        {user && (
+          <>
+            {/* Mobile menu button */}
+            <button
+              className="navbar-toggler d-lg-none"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#navbarNav"
+            >
+              <span className="navbar-toggler-icon"></span>
+            </button>
 
-          {/* Profile Component */}
-          <Profile />
-        </div>
-      )}
+            <div className="collapse navbar-collapse" id="navbarNav">
+              <ul className="navbar-nav me-auto">
+                <li className="nav-item">
+                  <Link
+                    to="/dashboard"
+                    className="nav-link d-flex align-items-center"
+                  >
+                    <i className="bi bi-house-fill me-1"></i>
+                    Dashboard
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link
+                    to="/chat"
+                    className="nav-link d-flex align-items-center"
+                  >
+                    <i className="bi bi-chat-dots-fill me-1"></i>
+                    Chat
+                  </Link>
+                </li>
+              </ul>
+
+              <div className="d-flex align-items-center">
+                <Profile />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </nav>
   );
 }
