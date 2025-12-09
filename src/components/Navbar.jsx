@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import Profile from "../pages/Profile"; // Import Profile component
 
 export default function AppNavbar() {
-  const { user } = useContext(AuthContext); // Remove logout since it's now in Profile
+  const { user } = useContext(AuthContext); // Add this line to get user from context
 
   return (
     <nav className="navbar navbar-dark bg-dark px-3 d-flex justify-content-between">

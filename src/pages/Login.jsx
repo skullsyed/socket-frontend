@@ -84,12 +84,11 @@ export default function Login() {
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyPress}
                     required
                     disabled={loading}
                   />
                 </div>
-
                 <div className="mb-3">
                   <label htmlFor="password" className="form-label">
                     Password
@@ -101,7 +100,7 @@ export default function Login() {
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyPress}
                     required
                     disabled={loading}
                   />
