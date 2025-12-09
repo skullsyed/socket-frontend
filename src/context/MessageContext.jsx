@@ -17,17 +17,34 @@ export const MessageProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState({});
   const [lastMessages, setLastMessages] = useState({});
+  const [allMessages, setAllMessages] = useState([]); // Store all messages for real-time updates
 
   useEffect(() => {
     if (!socket || !user) return;
 
     const handlePrivateMessage = (msg) => {
-      // Update last message for this user
+      console.log("MessageContext received message:", msg);
+
+      // Add to all messages array for real-time updates
+      setAllMessages((prev) => {
+        const messageExists = prev.some(
+          (existingMsg) => existingMsg._id === msg._id
+        );
+        if (!messageExists) {
+          return [...prev, msg];
+        }
+        return prev;
+      });
+
+      // Update last message for sender/receiver
+      const otherUserId =
+        msg.senderId === user._id ? msg.receiverId : msg.senderId;
       setLastMessages((prev) => ({
         ...prev,
-        [msg.senderId]: {
+        [otherUserId]: {
           message: msg.message || msg.text,
           timestamp: msg.timestamp || new Date().toISOString(),
+          senderId: msg.senderId,
         },
       }));
 
@@ -88,7 +105,6 @@ export const MessageProvider = ({ children }) => {
     setUnreadCount(total);
   }, [unreadMessages]);
 
-  // Use useCallback to prevent function recreation on every render
   const markAsRead = useCallback((senderId) => {
     setUnreadMessages((prev) => {
       const newUnread = { ...prev };
@@ -136,6 +152,25 @@ export const MessageProvider = ({ children }) => {
     [lastMessages]
   );
 
+  // Get messages for a specific conversation
+  const getConversationMessages = useCallback(
+    (userId1, userId2) => {
+      return allMessages
+        .filter(
+          (msg) =>
+            (msg.senderId === userId1 && msg.receiverId === userId2) ||
+            (msg.senderId === userId2 && msg.receiverId === userId1)
+        )
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    },
+    [allMessages]
+  );
+
+  // Update last messages when new message is added
+  const addMessage = useCallback((message) => {
+    setAllMessages((prev) => [...prev, message]);
+  }, []);
+
   return (
     <MessageContext.Provider
       value={{
@@ -147,6 +182,9 @@ export const MessageProvider = ({ children }) => {
         emitTyping,
         emitStoppedTyping,
         getLastMessage,
+        getConversationMessages,
+        addMessage,
+        allMessages,
       }}
     >
       {children}

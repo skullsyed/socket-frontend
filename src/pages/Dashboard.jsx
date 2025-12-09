@@ -6,6 +6,10 @@ import Chat from "./Chat";
 export default function Dashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
 
+  const handleCloseChat = () => {
+    setSelectedUser(null);
+  };
+
   return (
     <div className="container-fluid mt-4">
       <div className="row g-3">
@@ -14,7 +18,7 @@ export default function Dashboard() {
           <div className="card h-100">
             <div className="card-header bg-primary text-white">
               <h6 className="mb-0">
-                <i className="fas fa-users me-2"></i>
+                <i className="bi bi-people-fill me-2"></i>
                 Available Users
               </h6>
             </div>
@@ -29,7 +33,7 @@ export default function Dashboard() {
 
         {/* Chat Area */}
         <div className="col-md-6">
-          <Chat selectedUser={selectedUser} />
+          <Chat selectedUser={selectedUser} onClose={handleCloseChat} />
         </div>
 
         {/* Dashboard Stats */}
@@ -37,7 +41,7 @@ export default function Dashboard() {
           <div className="card mb-3">
             <div className="card-header bg-info text-white">
               <h6 className="mb-0">
-                <i className="fas fa-chart-bar me-2"></i>
+                <i className="bi bi-bar-chart-fill me-2"></i>
                 Dashboard Stats
               </h6>
             </div>
@@ -50,7 +54,7 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-header bg-success text-white">
               <h6 className="mb-0">
-                <i className="fas fa-info-circle me-2"></i>
+                <i className="bi bi-info-circle-fill me-2"></i>
                 Quick Info
               </h6>
             </div>
@@ -87,11 +91,11 @@ export default function Dashboard() {
                 className="btn btn-outline-light btn-sm"
                 onClick={() => setSelectedUser(null)}
               >
-                <i className="fas fa-times"></i>
+                <i className="bi bi-x-lg"></i>
               </button>
             </div>
             <div className="h-100">
-              <Chat selectedUser={selectedUser} />
+              <Chat selectedUser={selectedUser} onClose={handleCloseChat} />
             </div>
           </div>
         )}

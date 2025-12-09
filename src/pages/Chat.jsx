@@ -4,11 +4,19 @@ import { AuthContext } from "../context/AuthContext";
 import { MessageContext } from "../context/MessageContext";
 import API from "../api/axiosConfig";
 
-export default function Chat({ selectedUser }) {
+export default function Chat({ selectedUser, onClose }) {
   const { socket } = useContext(SocketContext);
   const { user } = useContext(AuthContext);
-  const { markAsRead, isUserTyping, emitTyping, emitStoppedTyping } =
-    useContext(MessageContext);
+  const messageContext = useContext(MessageContext);
+
+  const {
+    markAsRead = () => {},
+    isUserTyping = () => false,
+    emitTyping = () => {},
+    emitStoppedTyping = () => {},
+    getConversationMessages = () => [],
+    addMessage = () => {},
+  } = messageContext || {};
 
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState([]);
@@ -42,6 +50,33 @@ export default function Chat({ selectedUser }) {
     }, 1000);
   }, [selectedUser, isTyping, emitTyping, emitStoppedTyping]);
 
+  // Remove duplicates and sort messages
+  const removeDuplicatesAndSort = useCallback((messages) => {
+    const uniqueMessages = messages.reduce((acc, current) => {
+      const existingIndex = acc.findIndex(
+        (msg) =>
+          msg._id === current._id ||
+          (msg.timestamp === current.timestamp &&
+            msg.senderId === current.senderId &&
+            msg.message === current.message &&
+            msg.receiverId === current.receiverId)
+      );
+
+      if (existingIndex === -1) {
+        acc.push(current);
+      }
+      return acc;
+    }, []);
+
+    // Sort by timestamp
+    return uniqueMessages.sort((a, b) => {
+      const timeA = new Date(a.timestamp || a.createdAt);
+      const timeB = new Date(b.timestamp || b.createdAt);
+      return timeA - timeB;
+    });
+  }, []);
+
+  // Fetch messages from database
   useEffect(() => {
     const fetchMessages = async () => {
       if (!selectedUser || !user) return;
@@ -60,8 +95,13 @@ export default function Chat({ selectedUser }) {
           },
         });
 
-        console.log("Fetched messages:", res.data);
-        setChat(res.data || []);
+        console.log("Fetched messages from API:", res.data);
+        const messages = res.data || [];
+
+        // Remove duplicates and sort
+        const cleanMessages = removeDuplicatesAndSort(messages);
+        setChat(cleanMessages);
+
         setTimeout(scrollToBottom, 100);
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -72,35 +112,39 @@ export default function Chat({ selectedUser }) {
     };
 
     fetchMessages();
-  }, [selectedUser?._id, user?._id, markAsRead, scrollToBottom]);
+  }, [
+    selectedUser?._id,
+    user?._id,
+    markAsRead,
+    scrollToBottom,
+    removeDuplicatesAndSort,
+  ]);
 
+  // Listen for new socket messages
   useEffect(() => {
     if (!socket || !user) return;
 
     const handlePrivateMessage = (msg) => {
-      console.log("Received socket message:", msg);
+      console.log("Chat received socket message:", msg);
 
+      // Only process if it's for this conversation
       if (
         selectedUser &&
         ((msg.senderId === user._id && msg.receiverId === selectedUser._id) ||
           (msg.senderId === selectedUser._id && msg.receiverId === user._id))
       ) {
-        setChat((prev) => {
-          const messageExists = prev.some(
-            (existingMsg) =>
-              existingMsg._id === msg._id ||
-              (existingMsg.timestamp === msg.timestamp &&
-                existingMsg.senderId === msg.senderId &&
-                existingMsg.message === msg.message)
-          );
+        setChat((prevChat) => {
+          // Add new message and remove duplicates
+          const updatedChat = [...prevChat, msg];
+          const cleanChat = removeDuplicatesAndSort(updatedChat);
 
-          if (messageExists) return prev;
+          // Auto-scroll if new message was added
+          setTimeout(scrollToBottom, 50);
 
-          const newChat = [...prev, msg];
-          setTimeout(scrollToBottom, 100);
-          return newChat;
+          return cleanChat;
         });
 
+        // Mark as read if it's from the selected user and chat is open
         if (msg.senderId === selectedUser._id && markAsRead) {
           markAsRead(selectedUser._id);
         }
@@ -109,17 +153,20 @@ export default function Chat({ selectedUser }) {
 
     socket.on("private-message", handlePrivateMessage);
     return () => socket.off("private-message", handlePrivateMessage);
-  }, [socket, user?._id, selectedUser?._id, markAsRead, scrollToBottom]);
+  }, [
+    socket,
+    user?._id,
+    selectedUser?._id,
+    markAsRead,
+    scrollToBottom,
+    removeDuplicatesAndSort,
+  ]);
 
   useEffect(() => {
     if (selectedUser) {
       lastFetchedUser.current = null;
     }
   }, [selectedUser?._id]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chat, scrollToBottom]);
 
   useEffect(() => {
     return () => {
@@ -143,12 +190,24 @@ export default function Chat({ selectedUser }) {
       clearTimeout(typingTimeoutRef.current);
     }
 
+    const tempId = `temp_${Date.now()}_${Math.random()}`;
     const msg = {
+      _id: tempId, // Temporary unique ID
       senderId: user._id,
       receiverId: selectedUser._id,
       message: message.trim(),
       timestamp: new Date().toISOString(),
     };
+
+    // Clear input immediately for better UX
+    const currentMessage = message;
+    setMessage("");
+
+    // Add temporary message to chat for immediate feedback
+    setChat((prevChat) => {
+      const updatedChat = [...prevChat, msg];
+      return removeDuplicatesAndSort(updatedChat);
+    });
 
     try {
       console.log("Sending message to database:", msg);
@@ -166,34 +225,38 @@ export default function Chat({ selectedUser }) {
         text: response.data.message,
       };
 
-      socket.emit("private-message", socketMsg);
-
-      setChat((prev) => {
-        const messageExists = prev.some((msg) => msg._id === response.data._id);
-        if (messageExists) return prev;
-        const newChat = [...prev, response.data];
-        setTimeout(scrollToBottom, 50);
-        return newChat;
+      // Replace temporary message with real message
+      setChat((prevChat) => {
+        const filteredChat = prevChat.filter((m) => m._id !== tempId);
+        const updatedChat = [...filteredChat, response.data];
+        return removeDuplicatesAndSort(updatedChat);
       });
 
-      setMessage("");
+      // Emit to socket for real-time delivery to other users
+      socket.emit("private-message", socketMsg);
     } catch (error) {
       console.error("Error saving message to database:", error);
+
+      // Restore message in input if save failed
+      setMessage(currentMessage);
+
+      // Update temporary message to show error state
+      setChat((prevChat) => {
+        const updatedChat = prevChat.map((m) =>
+          m._id === tempId
+            ? { ...m, error: true, _id: `error_${Date.now()}` }
+            : m
+        );
+        return updatedChat;
+      });
 
       const fallbackMsg = {
         ...msg,
         text: msg.message,
-        _id: `temp_${Date.now()}`,
+        _id: `fallback_${Date.now()}`,
       };
 
       socket.emit("private-message", fallbackMsg);
-      setChat((prev) => {
-        const newChat = [...prev, fallbackMsg];
-        setTimeout(scrollToBottom, 50);
-        return newChat;
-      });
-      setMessage("");
-
       alert("Message sent but may not be saved to database.");
     }
   };
@@ -233,17 +296,29 @@ export default function Chat({ selectedUser }) {
               <i className="bi bi-chat-dots-fill me-2"></i>
               <h5 className="mb-0">Chat with {selectedUser.name}</h5>
             </div>
-            {isUserTyping(selectedUser._id) && (
-              <div className="d-flex align-items-center">
-                <div
-                  className="spinner-grow spinner-grow-sm text-light me-2"
-                  role="status"
-                >
-                  <span className="visually-hidden">Typing...</span>
+            <div className="d-flex align-items-center">
+              {isUserTyping(selectedUser._id) && (
+                <div className="d-flex align-items-center me-3">
+                  <div
+                    className="spinner-grow spinner-grow-sm text-light me-2"
+                    role="status"
+                  >
+                    <span className="visually-hidden">Typing...</span>
+                  </div>
+                  <small className="text-white-50">typing...</small>
                 </div>
-                <small className="text-white-50">typing...</small>
-              </div>
-            )}
+              )}
+              {/* Close Button */}
+              {onClose && (
+                <button
+                  className="btn btn-outline-light btn-sm"
+                  onClick={onClose}
+                  title="Close Chat"
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -274,51 +349,85 @@ export default function Chat({ selectedUser }) {
               </div>
             ) : (
               <>
-                {chat.map((msg, idx) => (
-                  <div key={msg._id || `msg_${idx}`} className="mb-3">
-                    <div
-                      className={`d-flex ${
-                        msg.senderId === user._id
-                          ? "justify-content-end"
-                          : "justify-content-start"
-                      }`}
-                    >
+                {/* Messages display with unique keys */}
+                {chat.map((msg, idx) => {
+                  // Create a truly unique key
+                  const uniqueKey =
+                    msg._id || `msg_${idx}_${msg.timestamp}_${msg.senderId}`;
+
+                  return (
+                    <div key={uniqueKey} className="mb-3">
                       <div
-                        className={`p-3 rounded-3 ${
+                        className={`d-flex ${
                           msg.senderId === user._id
-                            ? "bg-primary text-white"
-                            : "bg-white border"
+                            ? "justify-content-end"
+                            : "justify-content-start"
                         }`}
-                        style={{ maxWidth: "70%" }}
                       >
-                        <div className="fw-bold mb-1 small">
-                          {msg.senderId === user._id
-                            ? "You"
-                            : selectedUser.name}
-                        </div>
                         <div
-                          className="mb-2"
-                          style={{ wordBreak: "break-word" }}
+                          className={`p-3 rounded-3 position-relative ${
+                            msg.senderId === user._id
+                              ? msg.error
+                                ? "bg-danger text-white"
+                                : "bg-primary text-white"
+                              : "bg-white border"
+                          }`}
+                          style={{
+                            maxWidth: "70%",
+                            opacity: msg._id?.startsWith("temp_") ? 0.7 : 1,
+                          }}
                         >
-                          {msg.text || msg.message}
-                        </div>
-                        {(msg.timestamp || msg.createdAt) && (
-                          <small
-                            className={`d-block ${
-                              msg.senderId === user._id
-                                ? "text-white-50"
-                                : "text-muted"
-                            }`}
+                          <div className="fw-bold mb-1 small">
+                            {msg.senderId === user._id
+                              ? "You"
+                              : selectedUser.name}
+                          </div>
+                          <div
+                            className="mb-2"
+                            style={{ wordBreak: "break-word" }}
                           >
-                            {new Date(
-                              msg.timestamp || msg.createdAt
-                            ).toLocaleTimeString()}
-                          </small>
-                        )}
+                            {msg.text || msg.message}
+                          </div>
+                          {(msg.timestamp || msg.createdAt) && (
+                            <small
+                              className={`d-block ${
+                                msg.senderId === user._id
+                                  ? "text-white-50"
+                                  : "text-muted"
+                              }`}
+                            >
+                              {new Date(
+                                msg.timestamp || msg.createdAt
+                              ).toLocaleTimeString()}
+                            </small>
+                          )}
+
+                          {/* Message status indicator */}
+                          {msg.senderId === user._id && (
+                            <small className="position-absolute bottom-0 end-0 me-1 mb-1">
+                              {msg.error ? (
+                                <i
+                                  className="bi bi-exclamation-triangle text-warning"
+                                  title="Failed to send"
+                                ></i>
+                              ) : msg._id?.startsWith("temp_") ? (
+                                <i
+                                  className="bi bi-clock text-warning"
+                                  title="Sending..."
+                                ></i>
+                              ) : (
+                                <i
+                                  className="bi bi-check2-all text-success"
+                                  title="Sent"
+                                ></i>
+                              )}
+                            </small>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Typing indicator */}
                 {isUserTyping(selectedUser._id) && (
@@ -335,14 +444,17 @@ export default function Chat({ selectedUser }) {
                           <div
                             className="spinner-grow spinner-grow-sm text-muted me-2"
                             role="status"
+                            style={{ animationDelay: "0s" }}
                           ></div>
                           <div
                             className="spinner-grow spinner-grow-sm text-muted me-2"
                             role="status"
+                            style={{ animationDelay: "0.15s" }}
                           ></div>
                           <div
                             className="spinner-grow spinner-grow-sm text-muted"
                             role="status"
+                            style={{ animationDelay: "0.3s" }}
                           ></div>
                         </div>
                       </div>
