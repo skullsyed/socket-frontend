@@ -12,10 +12,19 @@ export default function UserList({ onUserSelect, selectedUser }) {
     getUnreadCount = () => 0,
     markAsRead = () => {},
     getLastMessage = () => null,
+    unreadMessages = {},
+    refreshUnreadCounts = () => {},
   } = messageContext || {};
 
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Force refresh when unreadMessages change
+  useEffect(() => {
+    setRefreshKey((prev) => prev + 1);
+    console.log("UserList: unreadMessages updated:", unreadMessages);
+  }, [unreadMessages]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,6 +43,7 @@ export default function UserList({ onUserSelect, selectedUser }) {
           : [];
 
         setUsers(filteredUsers);
+        console.log("UserList: Fetched users:", filteredUsers);
       } catch (error) {
         console.error("Error fetching users:", error);
       }
@@ -47,6 +57,14 @@ export default function UserList({ onUserSelect, selectedUser }) {
     if (!Array.isArray(users)) return [];
 
     return [...users].sort((a, b) => {
+      // First sort by unread messages (users with unread messages come first)
+      const unreadA = getUnreadCount(a._id);
+      const unreadB = getUnreadCount(b._id);
+
+      if (unreadA > 0 && unreadB === 0) return -1;
+      if (unreadA === 0 && unreadB > 0) return 1;
+
+      // Then sort by last message timestamp
       const lastMsgA = getLastMessage(a._id);
       const lastMsgB = getLastMessage(b._id);
 
@@ -57,13 +75,20 @@ export default function UserList({ onUserSelect, selectedUser }) {
       if (lastMsgA && !lastMsgB) return -1;
       if (!lastMsgA && lastMsgB) return 1;
 
+      // Finally sort alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [users, getLastMessage]);
+  }, [users, getLastMessage, getUnreadCount, refreshKey]);
 
   const handleUserSelect = (selectedUser) => {
     markAsRead(selectedUser._id);
     onUserSelect && onUserSelect(selectedUser);
+  };
+
+  // Refresh unread counts from API
+  const handleRefresh = () => {
+    console.log("Refreshing unread counts...");
+    refreshUnreadCounts();
   };
 
   if (loading) {
@@ -85,10 +110,20 @@ export default function UserList({ onUserSelect, selectedUser }) {
         <div className="text-center text-muted">
           <i className="bi bi-people display-4 opacity-50"></i>
           <p className="mt-2">No other users available</p>
+          <button
+            className="btn btn-outline-primary btn-sm mt-2"
+            onClick={handleRefresh}
+          >
+            <i className="bi bi-arrow-clockwise me-1"></i>
+            Refresh
+          </button>
         </div>
       </div>
     );
   }
+
+  console.log("UserList rendering with users:", sortedUsers.length);
+  console.log("Current unreadMessages state:", unreadMessages);
 
   return (
     <div className="list-group list-group-flush">
@@ -97,18 +132,23 @@ export default function UserList({ onUserSelect, selectedUser }) {
         const isSelected = selectedUser?._id === u._id;
         const lastMessage = getLastMessage(u._id);
 
+        console.log(
+          `UserList: User ${u.name} (${u._id}), unreadCount:`,
+          unreadCount
+        );
+
         return (
           <button
-            key={u._id}
+            key={`${u._id}-${refreshKey}`}
             type="button"
-            className={`list-group-item list-group-item-action d-flex align-items-start p-3 ${
+            className={`list-group-item list-group-item-action d-flex align-items-start p-3 position-relative ${
               isSelected ? "active" : ""
-            }`}
+            } ${unreadCount > 0 ? "border-start border-primary border-3" : ""}`}
             onClick={() => handleUserSelect(u)}
           >
             <div className="d-flex align-items-start w-100">
               {/* Avatar */}
-              <div className="me-3 flex-shrink-0">
+              <div className="me-3 flex-shrink-0 position-relative">
                 <div
                   className={`rounded-circle d-flex align-items-center justify-content-center ${
                     isSelected
@@ -132,7 +172,7 @@ export default function UserList({ onUserSelect, selectedUser }) {
                   <h6
                     className={`mb-0 text-truncate ${
                       isSelected ? "text-white" : "text-dark"
-                    }`}
+                    } ${unreadCount > 0 ? "fw-bold" : ""}`}
                   >
                     {u.name}
                   </h6>
@@ -158,18 +198,19 @@ export default function UserList({ onUserSelect, selectedUser }) {
                   <small
                     className={`text-truncate me-2 ${
                       isSelected ? "text-white-50" : "text-muted"
-                    }`}
-                    style={{ maxWidth: "200px" }}
+                    } ${unreadCount > 0 ? "fw-semibold" : ""}`}
+                    style={{ maxWidth: "180px" }}
                   >
                     {lastMessage ? lastMessage.message : u.email}
                   </small>
 
-                  {/* Unread Badge */}
+                  {/* Main unread badge */}
                   {unreadCount > 0 && (
                     <span
                       className={`badge rounded-pill ${
                         isSelected ? "bg-warning text-dark" : "bg-danger"
                       }`}
+                      style={{ minWidth: "20px", fontSize: "11px" }}
                     >
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
