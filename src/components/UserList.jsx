@@ -19,7 +19,7 @@ export default function UserList({ onUserSelect, selectedUser }) {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
-
+  const [error, setError] = useState(null);
   // Force refresh when unreadMessages change
   useEffect(() => {
     setRefreshKey((prev) => prev + 1);
@@ -28,9 +28,21 @@ export default function UserList({ onUserSelect, selectedUser }) {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user || !user._id) {
+        console.log("UserList: No user available yet");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
+      setError(null);
+
       try {
-        const { data } = await API.get("/api/auth/getAllUser", {
+        console.log("UserList: Fetching users from API...");
+        console.log("UserList: Current user ID:", user._id);
+        console.log("UserList: API Base URL:", import.meta.env.VITE_API_URL);
+
+        const response = await API.get("/api/auth/getAllUser", {
           headers: {
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
@@ -38,33 +50,86 @@ export default function UserList({ onUserSelect, selectedUser }) {
           },
         });
 
-        const filteredUsers = data.data
-          ? data.data.filter((u) => u._id !== user?._id)
-          : [];
+        console.log("UserList: Raw API response:", response);
+        console.log("UserList: Response data:", response.data);
+
+        // Handle different response formats
+        let allUsers = [];
+
+        if (Array.isArray(response.data)) {
+          console.log("UserList: Data is array format");
+          allUsers = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          console.log("UserList: Data is nested in 'data' property");
+          allUsers = response.data.data;
+        } else if (response.data.users && Array.isArray(response.data.users)) {
+          console.log("UserList: Data is nested in 'users' property");
+          allUsers = response.data.users;
+        } else {
+          console.warn("UserList: Unexpected response format:", response.data);
+          setError("Unexpected data format from server");
+          setLoading(false);
+          return;
+        }
+
+        console.log("UserList: All users from API:", allUsers);
+        console.log("UserList: Total users count:", allUsers.length);
+
+        // Filter out current user
+        const filteredUsers = allUsers.filter((u) => {
+          const isCurrentUser = u._id === user._id;
+          console.log(
+            `UserList: User ${u.name} (${u._id}) - Is current user: ${isCurrentUser}`
+          );
+          return !isCurrentUser;
+        });
+
+        console.log("UserList: Filtered users:", filteredUsers);
+        console.log("UserList: Filtered users count:", filteredUsers.length);
 
         setUsers(filteredUsers);
-        console.log("UserList: Fetched users:", filteredUsers);
+        setError(null);
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("UserList: Error fetching users:", error);
+        console.error("UserList: Error message:", error.message);
+        console.error("UserList: Error response:", error.response?.data);
+        console.error("UserList: Error status:", error.response?.status);
+
+        setError(
+          error.response?.data?.message ||
+            error.message ||
+            "Failed to load users"
+        );
+        setUsers([]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchData();
-  }, [user]);
+  }, [user?._id]);
 
   const sortedUsers = useMemo(() => {
-    if (!Array.isArray(users)) return [];
+    console.log("UserList: Sorting users...");
+    console.log("UserList: Input users:", users);
 
-    return [...users].sort((a, b) => {
-      // First sort by unread messages (users with unread messages come first)
+    if (!Array.isArray(users)) {
+      console.log("UserList: users is not an array, returning empty");
+      return [];
+    }
+
+    if (users.length === 0) {
+      console.log("UserList: users array is empty");
+      return [];
+    }
+
+    const sorted = [...users].sort((a, b) => {
       const unreadA = getUnreadCount(a._id);
       const unreadB = getUnreadCount(b._id);
 
       if (unreadA > 0 && unreadB === 0) return -1;
       if (unreadA === 0 && unreadB > 0) return 1;
 
-      // Then sort by last message timestamp
       const lastMsgA = getLastMessage(a._id);
       const lastMsgB = getLastMessage(b._id);
 
@@ -75,20 +140,22 @@ export default function UserList({ onUserSelect, selectedUser }) {
       if (lastMsgA && !lastMsgB) return -1;
       if (!lastMsgA && lastMsgB) return 1;
 
-      // Finally sort alphabetically
       return a.name.localeCompare(b.name);
     });
+
+    console.log("UserList: Sorted users:", sorted);
+    return sorted;
   }, [users, getLastMessage, getUnreadCount, refreshKey]);
 
   const handleUserSelect = (selectedUser) => {
+    console.log("UserList: User selected:", selectedUser);
     markAsRead(selectedUser._id);
     onUserSelect && onUserSelect(selectedUser);
   };
 
-  // Refresh unread counts from API
   const handleRefresh = () => {
-    console.log("Refreshing unread counts...");
-    refreshUnreadCounts();
+    console.log("UserList: Manual refresh triggered");
+    window.location.reload();
   };
 
   if (loading) {
@@ -104,7 +171,30 @@ export default function UserList({ onUserSelect, selectedUser }) {
     );
   }
 
+  if (error) {
+    return (
+      <div className="d-flex justify-content-center align-items-center p-4">
+        <div className="text-center text-danger">
+          <i className="bi bi-exclamation-triangle display-4 mb-3"></i>
+          <p className="mt-2">Error: {error}</p>
+          <button
+            className="btn btn-outline-primary btn-sm mt-2"
+            onClick={handleRefresh}
+          >
+            <i className="bi bi-arrow-clockwise me-1"></i>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!Array.isArray(sortedUsers) || sortedUsers.length === 0) {
+    console.log("UserList: No users to display");
+    console.log("UserList: sortedUsers:", sortedUsers);
+    console.log("UserList: Is array:", Array.isArray(sortedUsers));
+    console.log("UserList: Length:", sortedUsers?.length);
+
     return (
       <div className="d-flex justify-content-center align-items-center p-4">
         <div className="text-center text-muted">
@@ -122,8 +212,8 @@ export default function UserList({ onUserSelect, selectedUser }) {
     );
   }
 
-  console.log("UserList rendering with users:", sortedUsers.length);
-  console.log("Current unreadMessages state:", unreadMessages);
+  console.log("UserList: Rendering with users:", sortedUsers.length);
+  console.log("UserList: Current unreadMessages:", unreadMessages);
 
   return (
     <div className="list-group list-group-flush">
