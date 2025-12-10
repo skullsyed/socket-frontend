@@ -182,7 +182,15 @@ export default function Chat({ selectedUser, onClose }) {
   };
 
   const sendMessage = async () => {
-    if (!selectedUser || !message.trim() || !user) return;
+    if (!selectedUser || !message.trim() || !user || !socket) {
+      console.log("Cannot send message:", {
+        selectedUser: !!selectedUser,
+        message: message.trim(),
+        user: !!user,
+        socket: !!socket,
+      });
+      return;
+    }
 
     setIsTyping(false);
     emitStoppedTyping(selectedUser._id);
@@ -192,7 +200,7 @@ export default function Chat({ selectedUser, onClose }) {
 
     const tempId = `temp_${Date.now()}_${Math.random()}`;
     const msg = {
-      _id: tempId, // Temporary unique ID
+      _id: tempId,
       senderId: user._id,
       receiverId: selectedUser._id,
       message: message.trim(),
@@ -210,7 +218,8 @@ export default function Chat({ selectedUser, onClose }) {
     });
 
     try {
-      console.log("Sending message to database:", msg);
+      console.log("=== Sending Message ===");
+      console.log("To database...");
 
       const response = await API.post("/api/messages/createMessage", {
         senderId: msg.senderId,
@@ -218,24 +227,31 @@ export default function Chat({ selectedUser, onClose }) {
         message: msg.message,
       });
 
-      console.log("Database response:", response.data);
+      console.log("✓ Message saved to database:", response.data._id);
 
-      const socketMsg = {
-        ...response.data,
-        text: response.data.message,
-      };
-
-      // Replace temporary message with real message
+      // Replace temporary message with real message from database
       setChat((prevChat) => {
         const filteredChat = prevChat.filter((m) => m._id !== tempId);
         const updatedChat = [...filteredChat, response.data];
         return removeDuplicatesAndSort(updatedChat);
       });
 
-      // Emit to socket for real-time delivery to other users
+      // CRITICAL: Emit to socket AFTER saving to database
+      const socketMsg = {
+        _id: response.data._id,
+        senderId: response.data.senderId,
+        receiverId: response.data.receiverId,
+        message: response.data.message,
+        text: response.data.message,
+        timestamp: response.data.timestamp || new Date().toISOString(),
+      };
+
+      console.log("Emitting to socket:", socketMsg);
       socket.emit("private-message", socketMsg);
+      console.log("✓ Message emitted via socket");
+      console.log("=====================");
     } catch (error) {
-      console.error("Error saving message to database:", error);
+      console.error("✗ Error saving message:", error);
 
       // Restore message in input if save failed
       setMessage(currentMessage);
@@ -250,6 +266,7 @@ export default function Chat({ selectedUser, onClose }) {
         return updatedChat;
       });
 
+      // Try to send via socket anyway as fallback
       const fallbackMsg = {
         ...msg,
         text: msg.message,

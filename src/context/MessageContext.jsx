@@ -12,7 +12,7 @@ import API from "../api/axiosConfig";
 export const MessageContext = createContext();
 
 export const MessageProvider = ({ children }) => {
-  const { socket } = useContext(SocketContext);
+  const { socket, isConnected } = useContext(SocketContext);
   const { user } = useContext(AuthContext);
   const [unreadMessages, setUnreadMessages] = useState({});
   const [unreadCount, setUnreadCount] = useState(0);
@@ -27,7 +27,6 @@ export const MessageProvider = ({ children }) => {
     try {
       console.log("Fetching unread counts from API for user:", user._id);
 
-      // API expects userId as query parameter
       const response = await API.get("/api/messages/getUnreadCount", {
         params: {
           userId: user._id,
@@ -37,7 +36,6 @@ export const MessageProvider = ({ children }) => {
       console.log("Raw API response:", response.data);
 
       if (response.data) {
-        // Extract unreadBySender from the response
         const unreadBySender = response.data.unreadBySender || {};
         const totalUnread = response.data.totalUnread || 0;
 
@@ -57,7 +55,6 @@ export const MessageProvider = ({ children }) => {
       }
     } catch (error) {
       console.error("Error fetching unread counts:", error);
-      // Initialize with empty object on error
       setUnreadMessages({});
       setUnreadCount(0);
     }
@@ -68,25 +65,48 @@ export const MessageProvider = ({ children }) => {
     fetchUnreadCounts();
   }, [fetchUnreadCounts]);
 
+  // Setup socket listeners - CRITICAL FIX
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !user || !isConnected) {
+      console.log("⚠️ Socket not ready for listeners:", {
+        socket: !!socket,
+        user: !!user,
+        isConnected,
+      });
+      return;
+    }
 
-    console.log("Setting up socket listeners for user:", user._id);
+    console.log("✓✓✓ Setting up socket listeners for user:", user._id);
+    console.log("Socket ID:", socket.id);
 
     const handlePrivateMessage = (msg) => {
-      console.log("MessageContext received message:", msg);
+      console.log("\n=== MessageContext Received Message ===");
+      console.log("Message:", msg);
       console.log("Current user ID:", user._id);
       console.log("Message sender ID:", msg.senderId);
+      console.log("Message receiver ID:", msg.receiverId);
+
+      // Verify this message is for the current conversation
+      const isForCurrentUser =
+        msg.receiverId === user._id || msg.senderId === user._id;
+      console.log("Is for current user:", isForCurrentUser);
+
+      if (!isForCurrentUser) {
+        console.log("✗ Message not for current user, ignoring");
+        return;
+      }
 
       // Add to all messages array for real-time updates
       setAllMessages((prev) => {
         const messageExists = prev.some(
           (existingMsg) => existingMsg._id === msg._id
         );
-        if (!messageExists) {
-          return [...prev, msg];
+        if (messageExists) {
+          console.log("Message already exists, skipping");
+          return prev;
         }
-        return prev;
+        console.log("✓ Adding message to allMessages");
+        return [...prev, msg];
       });
 
       // Update last message for sender/receiver
@@ -101,13 +121,13 @@ export const MessageProvider = ({ children }) => {
             senderId: msg.senderId,
           },
         };
-        console.log("Updated lastMessages:", updated);
+        console.log("✓ Updated lastMessages for user:", otherUserId);
         return updated;
       });
 
       // Only count as unread if it's from another user
       if (msg.senderId !== user._id) {
-        console.log("Adding unread message from:", msg.senderId);
+        console.log("✓ Message from another user, incrementing unread count");
         setUnreadMessages((prev) => {
           const updated = {
             ...prev,
@@ -122,49 +142,78 @@ export const MessageProvider = ({ children }) => {
       } else {
         console.log("Message from current user, not counting as unread");
       }
+      console.log("=====================================\n");
     };
 
     const handleUserTyping = (data) => {
-      console.log("User typing:", data);
-      if (data.userId !== user._id) {
-        setTypingUsers((prev) => ({
-          ...prev,
-          [data.userId]: true,
-        }));
+      console.log("\n=== User Typing Event Received ===");
+      console.log("Full data:", data);
+      console.log("Typing user ID:", data.userId);
+      console.log("Current user ID:", user._id);
 
-        // Clear typing after 3 seconds
+      if (data.userId && data.userId !== user._id) {
+        console.log("✓ Setting typing state for user:", data.userId);
+        setTypingUsers((prev) => {
+          const updated = {
+            ...prev,
+            [data.userId]: true,
+          };
+          console.log("Updated typing users:", updated);
+          return updated;
+        });
+
+        // Clear typing after 3 seconds as fallback
         setTimeout(() => {
           setTypingUsers((prev) => {
             const newState = { ...prev };
             delete newState[data.userId];
+            console.log("Auto-cleared typing for:", data.userId);
             return newState;
           });
         }, 3000);
+      } else {
+        console.log("Ignoring typing event (same user or invalid data)");
       }
+      console.log("===================================\n");
     };
 
     const handleUserStoppedTyping = (data) => {
-      console.log("User stopped typing:", data);
-      if (data.userId !== user._id) {
+      console.log("\n=== User Stopped Typing Event Received ===");
+      console.log("Full data:", data);
+      console.log("User ID:", data.userId);
+
+      if (data.userId && data.userId !== user._id) {
+        console.log("✓ Removing typing state for user:", data.userId);
         setTypingUsers((prev) => {
           const newState = { ...prev };
           delete newState[data.userId];
+          console.log("Updated typing users:", newState);
           return newState;
         });
       }
+      console.log("==========================================\n");
     };
 
+    // Register event listeners
+    console.log("Registering event: private-message");
     socket.on("private-message", handlePrivateMessage);
+
+    console.log("Registering event: user-typing");
     socket.on("user-typing", handleUserTyping);
+
+    console.log("Registering event: user-stopped-typing");
     socket.on("user-stopped-typing", handleUserStoppedTyping);
 
+    console.log("✓✓✓ All socket listeners registered successfully!\n");
+
+    // Cleanup function
     return () => {
-      console.log("Cleaning up socket listeners");
+      console.log("🧹 Cleaning up socket listeners for user:", user._id);
       socket.off("private-message", handlePrivateMessage);
       socket.off("user-typing", handleUserTyping);
       socket.off("user-stopped-typing", handleUserStoppedTyping);
     };
-  }, [socket, user]);
+  }, [socket, user, isConnected]); // Add isConnected to dependencies
 
   // Mark messages as read using API
   const markAsRead = useCallback(
@@ -174,7 +223,6 @@ export const MessageProvider = ({ children }) => {
       try {
         console.log("Marking messages as read for sender:", senderId);
 
-        // Call API to mark messages as read
         const response = await API.post("/api/messages/markAsRead", {
           senderId: senderId,
           receiverId: user._id,
@@ -185,10 +233,8 @@ export const MessageProvider = ({ children }) => {
         if (response.data) {
           console.log("Successfully marked messages as read via API");
 
-          // Get the count that was marked as read
           const markedCount = unreadMessages[senderId] || 0;
 
-          // Update local state
           setUnreadMessages((prev) => {
             const newUnread = { ...prev };
             delete newUnread[senderId];
@@ -196,24 +242,16 @@ export const MessageProvider = ({ children }) => {
             return newUnread;
           });
 
-          // Update total count
           setUnreadCount((prev) => Math.max(0, prev - markedCount));
-        } else {
-          console.error("API response indicates failure:", response.data);
         }
       } catch (error) {
         console.error("Error marking messages as read:", error);
 
-        // Fallback: still update local state even if API fails
         const markedCount = unreadMessages[senderId] || 0;
 
         setUnreadMessages((prev) => {
           const newUnread = { ...prev };
           delete newUnread[senderId];
-          console.log(
-            "Updated unread after marking as read (fallback):",
-            newUnread
-          );
           return newUnread;
         });
 
@@ -226,12 +264,6 @@ export const MessageProvider = ({ children }) => {
   const getUnreadCount = useCallback(
     (senderId) => {
       const count = unreadMessages[senderId] || 0;
-      console.log(
-        `getUnreadCount for ${senderId}:`,
-        count,
-        "from state:",
-        unreadMessages
-      );
       return count;
     },
     [unreadMessages]
@@ -239,14 +271,17 @@ export const MessageProvider = ({ children }) => {
 
   const isUserTyping = useCallback(
     (userId) => {
-      return typingUsers[userId] || false;
+      const typing = typingUsers[userId] || false;
+      // Removed excessive logging
+      return typing;
     },
     [typingUsers]
   );
 
   const emitTyping = useCallback(
     (receiverId) => {
-      if (socket) {
+      if (socket && user) {
+        console.log("Emitting typing event to:", receiverId);
         socket.emit("typing", { userId: user._id, receiverId });
       }
     },
@@ -255,7 +290,8 @@ export const MessageProvider = ({ children }) => {
 
   const emitStoppedTyping = useCallback(
     (receiverId) => {
-      if (socket) {
+      if (socket && user) {
+        console.log("Emitting stopped-typing event to:", receiverId);
         socket.emit("stopped-typing", { userId: user._id, receiverId });
       }
     },
@@ -269,7 +305,6 @@ export const MessageProvider = ({ children }) => {
     [lastMessages]
   );
 
-  // Get messages for a specific conversation
   const getConversationMessages = useCallback(
     (userId1, userId2) => {
       return allMessages
@@ -283,37 +318,14 @@ export const MessageProvider = ({ children }) => {
     [allMessages]
   );
 
-  // Update last messages when new message is added
   const addMessage = useCallback((message) => {
     setAllMessages((prev) => [...prev, message]);
   }, []);
 
-  // Refresh unread counts manually (useful for testing or forced refresh)
   const refreshUnreadCounts = useCallback(() => {
     console.log("Manually refreshing unread counts...");
     fetchUnreadCounts();
   }, [fetchUnreadCounts]);
-
-  // Test function to add unread messages manually (for debugging)
-  const addTestUnreadMessage = useCallback((userId, count = 1) => {
-    console.log(`Adding ${count} test unread messages for user:`, userId);
-    setUnreadMessages((prev) => ({
-      ...prev,
-      [userId]: (prev[userId] || 0) + count,
-    }));
-    setUnreadCount((prev) => prev + count);
-  }, []);
-
-  // Debug: Log state changes
-  useEffect(() => {
-    console.log("=== MessageContext State Debug ===");
-    console.log("- unreadMessages:", unreadMessages);
-    console.log("- unreadCount:", unreadCount);
-    console.log("- lastMessages:", lastMessages);
-    console.log("- socket connected:", !!socket);
-    console.log("- user:", user ? user._id : "null");
-    console.log("================================");
-  }, [unreadMessages, unreadCount, lastMessages, socket, user]);
 
   return (
     <MessageContext.Provider
@@ -330,7 +342,6 @@ export const MessageProvider = ({ children }) => {
         addMessage,
         allMessages,
         refreshUnreadCounts,
-        addTestUnreadMessage, // For debugging
       }}
     >
       {children}
