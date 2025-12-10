@@ -25,7 +25,7 @@ export const SocketProvider = ({ children }) => {
     console.log("User ID:", user._id);
     console.log("User Name:", user.name);
 
-    const s = io("http://localhost:5000", {
+    const s = io("https://socket-backend-quck.onrender.com", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 5,
