@@ -18,8 +18,8 @@ export default function App() {
             <AppNavbar />
 
             <Routes>
-              {/* Default route - redirect to dashboard */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              {/* Default route - redirect to login */}
+              <Route path="/" element={<Navigate to="/login" replace />} />
 
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
