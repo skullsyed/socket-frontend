@@ -7,11 +7,10 @@ export const SocketContext = createContext();
 export const SocketProvider = ({ children }) => {
   const { user } = useContext(AuthContext);
   const [socket, setSocket] = useState(null);
-  const [isConnected, setIsConnected] = useState(false); // ADD THIS LINE
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     if (!user || !user._id) {
-      // Disconnect socket when user logs out
       if (socket) {
         console.log("User logged out, disconnecting socket");
         socket.disconnect();
@@ -25,11 +24,18 @@ export const SocketProvider = ({ children }) => {
     console.log("User ID:", user._id);
     console.log("User Name:", user.name);
 
-    const s = io("https://socket-backend-quck.onrender.com", {
+    // Get socket URL from environment variable
+    const SOCKET_URL =
+      import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+
+    console.log("Connecting to socket server:", SOCKET_URL);
+
+    const s = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      timeout: 20000,
     });
 
     s.on("connect", () => {
@@ -37,11 +43,9 @@ export const SocketProvider = ({ children }) => {
       console.log("Socket ID:", s.id);
       console.log("Registering user with backend...");
 
-      // Register user with backend
       s.emit("user-connected", user._id);
       setIsConnected(true);
 
-      // Confirm registration after a short delay
       setTimeout(() => {
         console.log("Double-checking registration...");
         s.emit("user-connected", user._id);
@@ -54,14 +58,12 @@ export const SocketProvider = ({ children }) => {
     });
 
     s.on("connect_error", (error) => {
-      console.error("✗ Socket connection error:", error);
+      console.error("✗ Socket connection error:", error.message);
     });
 
     s.on("reconnect", (attemptNumber) => {
       console.log(`✓ Socket reconnected after ${attemptNumber} attempts`);
-      // Re-register user after reconnection
       s.emit("user-connected", user._id);
-      console.log("✓ User re-registered after reconnection");
       setIsConnected(true);
     });
 
@@ -73,7 +75,6 @@ export const SocketProvider = ({ children }) => {
       console.error("✗ Failed to reconnect to socket server");
     });
 
-    // Listen for online/offline users
     s.on("user-online", (userId) => {
       console.log("📢 User came online:", userId);
     });
@@ -82,7 +83,6 @@ export const SocketProvider = ({ children }) => {
       console.log("📢 User went offline:", userId);
     });
 
-    // Listen for registration confirmation
     s.on("registration-confirmed", (data) => {
       console.log("✓✓✓ REGISTRATION CONFIRMED BY SERVER ✓✓✓");
       console.log("Confirmed data:", data);
@@ -99,7 +99,6 @@ export const SocketProvider = ({ children }) => {
     };
   }, [user?._id]);
 
-  // Log connection status changes
   useEffect(() => {
     console.log(
       "Socket connection status:",

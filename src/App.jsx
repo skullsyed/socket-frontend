@@ -1,11 +1,11 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppNavbar from "./components/Navbar";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { AuthProvider, AuthContext } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthContext";
 import { SocketProvider } from "./context/SocketContext";
 import { MessageProvider } from "./context/MessageContext";
 
@@ -18,6 +18,9 @@ export default function App() {
             <AppNavbar />
 
             <Routes>
+              {/* Default route - redirect to dashboard */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
 
@@ -38,6 +41,9 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+
+              {/* Catch all route - redirect to dashboard */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </BrowserRouter>
         </MessageProvider>
