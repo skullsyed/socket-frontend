@@ -8,7 +8,6 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
   },
-  base: "/", // Important for routing
+  base: "/",
 });
